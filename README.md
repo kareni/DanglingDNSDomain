@@ -1,8 +1,8 @@
 **Tool to generate the dangling domains for a tenant (multiple subscriptions)**
 
-This tool would be used by Azure customers to list the dangling domains (and probably list of all domains chains they have) in their subscriptions that have a CNAME in Azure and the associated azure resource. Alternatively, for customers like Starbucks, who have the CNAMES in the other DNS services pointing to Azure resources, the customer can provide the CNAMEs in an input file to the tool. Currently the tool is in form of a PowerShell script, we have to decide how would we make it available to the customers.
+This tool would be used by Azure customers to list the dangling domains (and probably list of all domains chains they have) in their subscriptions that have a CNAME in Azure and the associated azure resource. Alternatively, for customers like Contoso, who have the CNAMES in the other DNS services pointing to Azure resources, the customer can provide the CNAMEs in an input file to the tool. Currently the tool is in form of a PowerShell script, we have to decide how would we make it available to the customers.
 
-This tool needs to work for the resources mentioned in the table below. The tool extracts or takes as inputs all the CNAMES that the tenant has either within Azure DNS or fed as a file (in case CNAMES are in the external DNS system like in case of Starbucks).
+This tool needs to work for the resources mentioned in the table below. The tool extracts or takes as inputs all the CNAMES that the tenant has either within Azure DNS or fed as a file (in case CNAMES are in the external DNS system like in case of Contoso).
 
 The following are the broad steps that the tool should take:
 
