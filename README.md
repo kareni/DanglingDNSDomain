@@ -35,6 +35,10 @@ Some more details about each step:
 | Azure App Service - Slots | microsoft.web/sites/slots | abc-def.azurewebsites.net |
 
 
+
+> ℹ️ **_NOTE:_**  The script only works on zones and resources the user has the access to in the subscription. 
+
+
 **How to use the tool.**
 
 Generate dangling DNS records list from given CName list(Csv/Json file) and/or using Azure resource graphs based on the user authentication running the script.
@@ -110,21 +114,21 @@ Get-Help .\Get-DanglingDnsRecordsPsDesktop.ps1 -Examples
 ```
 **Input Examples:**
 
-.To fetch DNS records from an Azure subscription
+To fetch DNS records from an Azure subscription
 
 ```powershell
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -FetchDnsRecordsFromAzureSubscription
 
-.To fetch DNS records from Input file Csv/Json
+To fetch DNS records from Input file Csv/Json
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -InputFileDnsRecords .\CNameDNSMap.csv
 
-.To fetch DNS records from both the input file and an Azure subscription
+To fetch DNS records from both the input file and an Azure subscription
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -InputFileDnsRecords .\CNameDNSMap.csv -FileAndAzureSubscription
 
-.To fetch DNS records from Azure subscription with subscription Id and DNS zone filters to reduce the scope of search.
+To fetch DNS records from Azure subscription with subscription Id and DNS zone filters to reduce the scope of search.
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -FetchDnsRecordsFromAzureSubscription -InputSubscriptionIdRegexFilter 533 -InputDnsZoneNameRegexFilter testdnszone-1.a
 
