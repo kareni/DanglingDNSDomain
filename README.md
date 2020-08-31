@@ -1,21 +1,21 @@
 **Tool to generate the dangling domains for a tenant (multiple subscriptions)**
 
-This tool would be used by Azure customers to list the dangling domains (and probably list of all domains chains they have) in their subscriptions that have a CNAME in Azure and the associated azure resource. Alternatively, for customers like Contoso, who have the CNAMES in the other DNS services pointing to Azure resources, the customer can provide the CNAMEs in an input file to the tool. Currently the tool is in form of a PowerShell script, we have to decide how would we make it available to the customers.
+This tool is to be used by Azure customers to list all domain chains that have a CNAME associated to an existing Azure resource that was created on their subscriptions or tenants. Alternatively, for customers like Contoso, who have the CNAMES in the other DNS services pointing to Azure resources, the customer can provide the CNAMEs in an input file to the tool. You can use this tool by executing this as a PowerShell script.
 
-This tool needs to work for the resources mentioned in the table below. The tool extracts or takes as inputs all the CNAMES that the tenant has either within Azure DNS or fed as a file (in case CNAMES are in the external DNS system like in case of Contoso).
+This tool can be used against the Azure resources listed at the bottom of this file. The tool extracts, or takes as inputs, all the CNAMES that the tenant has either within Azure DNS or fed as a file (in case CNAMES are in the external DNS system like in case of Contoso).
 
-The following are the broad steps that the tool should take:
+The following are the broad steps on how to use the tool:
 
-1. Get all CNAMES (Option of querying all CNAMES for current tenant, or take as input in a file)
-2. Filter to those CNAME that have canonical name ending with well-known resource URLs: azurefd.net, blob.core.windows.net, azureedge.net etc…
-3. For each CNAME in \&lt;B\&gt; above, check if a resource exists for this tenant that has the FQDN that matches with the canonical name in the CNAME.
+1. Get all CNAMES (Option of querying all CNAMES for current tenant that you have acccess to, or take as input in a file)
+2. Filter to those CNAME that have canonical name ending with well-known resource URLs: azurefd.net, blob.core.windows.net, azureedge.net etc.
+3. For each CNAME in the above, check if a resource exists for this tenant that has the FQDN that matches with the canonical name in the CNAME.
 4. For the CNAME records that do not have corresponding matching resource in the tenant, put it into a list of dangling sub-domains, while the CNAME records that do have corresponding matching resource in tenant goes into a separate list.
 5. Make the complete list available to the customer in a tabulated and csv list that can be imported into Excel.
 
 Some more details about each step:
 
-1. To get all CNAMES:
-  1. Query all subscriptions for your user account. Use [Get-AzureRmSubscription](https://docs.microsoft.com/en-us/powershell/module/azurerm.profile/get-azurermsubscription?view=azurermps-6.13.0)
+**To get all CNAMES:**
+  1. Query all subscriptions for your user account or tenant. Use [Get-AzureRmSubscription](https://docs.microsoft.com/en-us/powershell/module/azurerm.profile/get-azurermsubscription?view=azurermps-6.13.0)
   2. For each subscription get all resource groups. Use [Get-AzResourceGroup](https://docs.microsoft.com/en-us/powershell/module/az.resources/get-azresourcegroup?view=azps-4.4.0)
   3. For each Resource Group get all Zones. Use [Get-AzDnsZone](https://docs.microsoft.com/en-us/powershell/module/az.dns/get-azdnszone?view=azps-4.4.0)
   4. For each DNS Zone, Get all record sets of type CNAME. Use [Get-AzDnsrecordSet](https://docs.microsoft.com/en-us/powershell/module/az.dns/get-azdnsrecordset?view=azps-4.4.0)
@@ -36,12 +36,12 @@ Some more details about each step:
 
 
 
-> ℹ️ **_NOTE:_**  The script only works on zones and resources the user has the access to in the subscription. 
+> ℹ️ **_NOTE:_**  The script only works on zones and resources the user has the access to in the subscription. If you are a Global Tenant Admin you can elevate your account to get access to all of the subscriptions under your tenant.  To do this, go [here:](https://docs.microsoft.com/en-us/azure/role-based-access-control/elevate-access-global-admin)
 
 
 **How to use the tool.**
 
-Generate dangling DNS records list from given CName list(Csv/Json file) and/or using Azure resource graphs based on the user authentication running the script.
+Generate dangling DNS records list from given CName list (Csv/Json file) and/or using Azure resource graphs based on the user authentication running the script.
 
 **Prerequisites:**
 
@@ -128,7 +128,7 @@ To fetch DNS records from both the input file and an Azure subscription
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -InputFileDnsRecords .\CNameDNSMap.csv -FileAndAzureSubscription
 
-To fetch DNS records from Azure subscription with subscription Id and DNS zone filters to reduce the scope of search.
+To fetch DNS records from Azure subscription with Subscription Id and DNS zone filters to reduce the scope of search.
 
 .\Get-DanglingDnsRecordsPsCore.ps1 -FetchDnsRecordsFromAzureSubscription -InputSubscriptionIdRegexFilter 533 -InputDnsZoneNameRegexFilter testdnszone-1.a
 
