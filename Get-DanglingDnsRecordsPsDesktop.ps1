@@ -9,6 +9,34 @@
     - Need to run as administrator to be able install the required libraries
     - Supported in PowerShell desktop/version lower than 6 only, as this script is using windows workflow.
 
+.PARAMETER  InputFileDNSRecords
+
+    Input Csv/Json filename with (CName, FQDN mapping), default None
+
+.PARAMETER FetchDnsRecordsFromAzureSubscription
+
+    Switch to express the intent to query azure subscriptions, default off
+
+.PARAMETER FileAndAzureSubscription
+
+    Switch to express the intent to fetch DNS records from both input file and from Azure DNS records, default off
+
+.PARAMETER InputSubscriptionIdRegexFilterForAzureDns
+
+    Filter to constrain the scope of subscriptions for fetching the Azure DNS recordsets, default match all
+
+.PARAMETER InputSubscriptionIdRegexFilterForAzureResourcesGraph
+
+    Filter to constrain the scope of subscriptions for fetching the Azure resources from the Azure resource graph, default match all
+
+.PARAMETER InputDnsZoneNameRegexFilter
+    
+    Filter to run the query against matching DNS zone names, default match all
+
+.PARAMETER InputInterestedDnsZones OutputFileLocation
+
+    Location of the output files produced; default current directory
+
 .EXAMPLE
     To fetch DNS records from Azure subscription
    
@@ -17,23 +45,42 @@
 .EXAMPLE
     To fetch DNS records from Input file Csv/Json
    
-    .\Get-DanglingDnsRecordsPsDesktop.ps1 -InputFileDnsRecords .\CNameDNSMap.csv
+    .\Get-DanglingDnsRecordsPsDesktop.ps1 -InputFileDnsRecords .\CNameToDNSMap.csv
+
+    Headers CName, Fqdn
+                                                                   
+
+       Csv file context example:
+       
+       CNAME,FQDN
+       testwanperfdiag,testwanperfdiag.blob.core.windows.net
+
+       Json file content example:
+
+       [
+         {
+             "CNAME":  "testwanperfdiag",
+             "FQDN":  "testwanperfdiag.blob.core.windows.net"
+                         
+                                 
+         }
+       ]
 
 
 .EXAMPLE
     To fetch DNS records from both input file and Azure subscription
 
-    .\Get-DanglingDnsRecordsPsDesktop.ps1 -InputFileDnsRecords .\CNameDNSMap.csv -FileAndAzureSubscription
+    .\Get-DanglingDnsRecordsPsDesktop.ps1 -InputFileDnsRecords .\CNameToDNSMap.csv -FileAndAzureSubscription
 
 .EXAMPLE
     To fetch DNS records from Azure subscription with subscription Id and DNS zone filters to reduce the scope of search.
 
-    .\Get-DanglingDnsRecordsPsCore.ps1 -FetchDnsRecordsFromAzureSubscription -InputSubscriptionIdRegexFilter 533 -InputDnsZoneNameRegexFilter testdnszone-1.a
+    .\Get-DanglingDnsRecordsPsDesktop.ps1 -FetchDnsRecordsFromAzureSubscription -InputSubscriptionIdRegexFilterForAzureDns 533 -InputDnsZoneNameRegexFilter testdnszone-1.a
 
 .NOTES
     Copyright 2020 Microsoft Corp.
     Version 1.0.20200811
-#>	
+#>    
 [cmdletbinding(DefaultParameterSetName='Parameter Set 0')]
 param
 (   
@@ -43,37 +90,49 @@ param
 
     # To fetch DNS records against Azure subscription
     #    
-    [parameter(Mandatory=$false,ParameterSetName='Parameter Set 2')]
     [parameter(Mandatory=$true,ParameterSetName='Parameter Set 3')]
     [switch]$FetchDnsRecordsFromAzureSubscription,
 
-    # Name of csv/json file with CName to FQDN map file
-    # Headers CName, FQDN, ZoneName, ResourceGroup    
+    <#
+        Name of csv/json file with CName to FQDN map file
+        Headers CName, FQDN, ZoneName, ResourceGroup
+        ZoneName, ResourceGroup - values for these headers are optional
+
+           Csv file context example:
+           
+           CNAME,FQDN,Zone,ResourceGroup
+           testwanperfdiag,testwanperfdiag.blob.core.windows.net,,
+
+           Json file content example:
+
+           [
+             {
+                 "CNAME":  "testwanperfdiag",
+                 "FQDN":  "testwanperfdiag.blob.core.windows.net",
+                 "Zone":  "",
+                 "ResourceGroup":  ""
+             }
+           ]
+    #>
     [parameter(Mandatory=$true,ParameterSetName='Parameter Set 2')]
-    [parameter(Mandatory=$false,ParameterSetName='Parameter Set 3')]
     [parameter(Mandatory=$true,ParameterSetName='Parameter Set 4')]
     [string]$InputFileDnsRecords,
 
-    # Azure DNS zone regex
-    [parameter(Mandatory=$false,ParameterSetName='Parameter Set 2')]
+    # Azure DNS zone regex   
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 3')]
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 4')]
     [string]$InputDnsZoneNameRegexFilter,
 
-    # List of interedsted Azure DNS zone suffixes delimited by "|"
-    #
-    [parameter(Mandatory=$false,ParameterSetName='Parameter Set 2')]
+    # Azure subscriptionId regex for Azure DNS queries
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 3')]
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 4')]
-    [string]$InputInterestedDnsZones = "azurefd.net|blob.core.windows.net|azureedge.net|cloudapp.azure.com|
-                                        trafficmanager.net|azurecontainer.io|azure-api.net|azurewebsites.net|
-                                        cloudapp.net|xbox.com",
+    [string]$InputSubscriptionIdRegexFilterForAzureDns,
 
-    # Azure subscriptionId regex
+    # Azure subscriptionId regex for Azure resource graphs
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 2')]
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 3')]
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 4')]
-    [string]$InputSubscriptionIdRegexFilter,
+    [string]$InputSubscriptionIdRegexFilterForAzureResourcesGraph,
 
     # Location of output Files
     [parameter(Mandatory=$false,ParameterSetName='Parameter Set 2')]
@@ -98,6 +157,9 @@ If($FileAndAzureSubscription)
     $FetchDnsRecordsFromAzureSubscription = $true
 }
 
+# List of interedsted Azure DNS zone suffixes delimited by "|"
+$interestedAzureDnsZones = "azurefd.net|blob.core.windows.net|azureedge.net|cloudapp.azure.com|
+                           trafficmanager.net|azurecontainer.io|azure-api.net|azurewebsites.net|cloudapp.net"
 # Run in serial or parallel by subscription
 [switch]$runParallel = $true
 
@@ -127,7 +189,6 @@ $resourceProviderList = @(
     [pscustomObject]@{'Service' = 'Azure Public IP addresses'; 'DomainSuffix' = 'cloudapp.azure.com'},
     [pscustomObject]@{'Service' = 'Azure Classic Cloud'; 'DomainSuffix' = 'cloudapp.net'},
     [pscustomObject]@{'Service' = 'Azure Traffic Manager'; 'DomainSuffix' = 'trafficmanager.net'}
-    [pscustomObject]@{'Service' = 'Azure Xbox'; 'DomainSuffix' = 'xbox.com'}
     )
 
 # Function to compute the time
@@ -160,7 +221,6 @@ Function Get-ResourceProvider
         'cloudapp.azure.com$' { $resourceProvider = 'cloudapp.azure.com'; break}
         'cloudapp.net$' { $resourceProvider = 'cloudapp.net'; break}
         'trafficmanager.net$' { $resourceProvider = 'trafficmanager.net'; break}
-        'xbox.com$' { $resourceProvider = 'xbox.com'; break}
     }
     return $resourceProvider
 }
@@ -199,15 +259,15 @@ If($InputFileDnsRecords)
     {
         ".csv$"
         {
-            $inputCNameList = Import-Csv $((Get-Item $InputFileDnsRecords).FullName) -Header CName, Fqdn, ZoneName, ResourceGroup |
-                              Where-Object {$psitem.FQDN -match $inputInterestedDnsZones}
+            $inputCNameList = Import-Csv $((Get-Item $InputFileDnsRecords).FullName) -Header CName, Fqdn|
+                              Where-Object {$psitem.FQDN -match $interestedAzureDnsZones}
             break
         }
 
         ".json$"
         {
             $inputCNameList = Get-Content $((Get-Item $InputFileDnsRecords).FullName) | ConvertFrom-Json |
-                              Where-Object {$psitem.FQDN -match $inputInterestedDnsZones}
+                              Where-Object {$psitem.FQDN -match $interestedAzureDnsZones}
             
             # add additional properties, if input object does not contain it
             $inputCNameList | ForEach-Object `
@@ -225,7 +285,15 @@ If($InputFileDnsRecords)
         }
     }
 
-    Add-ResourceProvider $inputCNameList
+     if($null -eq $inputCNameList)
+    {
+        Write-Warning "No Records found in input file, please check the file.."
+        exit
+    }
+    else
+    {
+        Add-ResourceProvider $inputCNameList
+    }
 }
 $inputFileProcessingTime = Get-TimeToProcess $inputFileProcessingStart
 
@@ -253,7 +321,7 @@ Foreach($module in $AZModules)
         Import-Module -name $module -Scope Local -Force
     }else
     {
-        Install-module -name $module -AllowClobber -Force -Scope CurrentUser -SkipPublisherCheck
+        Install-module -name $module -AllowClobber -Force -Scope CurrentUser
         Import-Module -name $module -Scope Local -Force
     }
 
@@ -270,21 +338,19 @@ $AzLibrariesLoadTime = Get-TimeToProcess $AzLibrariesLoadStart
 $AZAccountConnectStart = Get-Date
 try 
 { 
-	Get-AzTenant
+    Get-AzTenant  -ErrorAction Stop
 } 
-catch
-{
-    Write-Error "AzureAccount not connected -try connecting to AzureAccount: $($error[0].exception)"
+catch{
+    Write-warning "AzAccount not connected trying to connect to AzAccount"
+    $connectionDoneFromScript = $true
     Connect-AzAccount 
 }
-
-Get-AzSubscription | Where-Object {$psitem.Id -match $inputSubscriptionIdRegexFilter}|
-Sort-Object -Unique | Set-AzContext
 
 $AZAccountConnectTime = Get-TimeToProcess $AZAccountConnectStart
 
 $interestedResourcesQuery = "
-    resources 
+    resources
+    | where subscriptionId matches regex '(?i)$InputSubscriptionIdRegexFilterForAzureResourcesGraph'
     | where type in ('microsoft.network/frontdoors','microsoft.storage/storageaccounts',
     'microsoft.cdn/profiles/endpoints','microsoft.network/publicipaddresses',
     'microsoft.network/trafficmanagerprofiles','microsoft.containerinstance/containergroups',
@@ -304,7 +370,7 @@ $interestedResourcesQuery = "
        ''
     )
     | where isnotempty(dnsEndpoint)
-	| extend resourceProvider = case
+    | extend resourceProvider = case
     (
         dnsEndpoint endswith 'azure-api.net', 'azure-api.net',
         dnsEndpoint endswith 'azurecontainer.io', 'azurecontainer.io',
@@ -315,13 +381,14 @@ $interestedResourcesQuery = "
         dnsEndpoint endswith 'cloudapp.azure.com', 'cloudapp.azure.com',
         dnsEndpoint endswith 'cloudapp.net', 'cloudapp.net',
         dnsEndpoint endswith 'trafficmanager.net', 'trafficmanager.net',
-        dnsEndpoint endswith 'xbox.com', 'xbox.com',
-		'' 
+        '' 
     )
     | project id, tenantId, subscriptionId, type, resourceGroup, name, dnsEndpoint, properties, resourceProvider
     | order by id asc"
 
-$dnszoneQuery = "resources | where type =~ 'microsoft.network/dnszones' | where name matches regex '(?i)$inputDnsZoneNameRegexFilter'"
+$dnszoneQuery = "resources | where type =~ 'microsoft.network/dnszones'
+             | where subscriptionId matches regex '(?i)$InputSubscriptionIdRegexFilterForAzureResourcesGraph'
+             | where name matches regex '(?i)$inputDnsZoneNameRegexFilter'"
 
 # Function to retrive the Azure DNS records
 #
@@ -358,7 +425,7 @@ Function Get-AzCNameToDnsMap
     $cNameToDnsMapList = [System.Collections.ArrayList]::new()
     Foreach($zone in $dnsZones)
     {
-        $interestedRecords = Get-DnsCNameRecords $zone | Where-Object {$psitem.Fqdn -match $inputInterestedDnsZones}
+        $interestedRecords = Get-DnsCNameRecords $zone | Where-Object {$psitem.Fqdn -match $interestedAzureDnsZones}
         Foreach($record in $interestedRecords)
         {
             $record | Add-Member -NotePropertyName 'subscriptionName' -NotePropertyValue $psitem.Name -Force
@@ -506,10 +573,11 @@ workflow Get-DnsRecordsWorkFlow
     (
         $wfDnsZones,        
         $wfContext,
-        $wfInterestedDnsZones
+        $wfInterestedDnsZones,
+        $wfSubscription
     )
 
-    Foreach -parallel($wfDnsZone in $wfDnsZones)
+    Foreach -parallel ($wfDnsZone in $wfDnsZones)
     {
         inlinescript
         {
@@ -517,22 +585,22 @@ workflow Get-DnsRecordsWorkFlow
             $AZModules = ('Az.Accounts', 'Az.Dns')
             Foreach($module in $AZModules)
             {
-                try
+                If(Get-Module -Name $module)
                 {
-                    Import-Module -name $module -Scope Local -Force            
-                }
-                catch
+                    continue
+                }elseif(Get-Module -ListAvailable -Name $module)
                 {
-                    Install-module -name $module -AllowClobber -Force -Confirm -Scope CurrentUser
+                    Import-Module -name $module -Scope Local -Force
+                }else
+                {
+                    Install-module -name $module -AllowClobber -Force -Scope CurrentUser -SkipPublisherCheck
+                    Import-Module -name $module -Scope Local -Force
                 }
-                
-                If(!$(Get-Module $module))
+            
+                If(!$(Get-Module -Name $module))
                 {
                     Write-Error "Could not load dependant module: $module"
                     throw
-                }else
-                {
-                    Import-module $module -Force -Scope Local
                 }
             }
 
@@ -554,7 +622,6 @@ workflow Get-DnsRecordsWorkFlow
                     'cloudapp.azure.com$' { $resourceProvider = 'cloudapp.azure.com'; break}
                     'cloudapp.net$' { $resourceProvider = 'cloudapp.net'; break}
                     'trafficmanager.net$' { $resourceProvider = 'trafficmanager.net'; break}
-                    'xbox.com' { $resourceProvider = 'xbox.com'; break}
                 }
                 return $resourceProvider
             }
@@ -608,8 +675,12 @@ workflow Get-DnsRecordsWorkFlow
             $dnszone = $using:wfDnsZone            
             $context = $using:wfContext
             $interestedDnsZones = $using:wfInterestedDnsZones            
-            
+            $subscription = $using:wfSubscription
+
+            Select-AzSubscription -SubscriptionObject $subscription
+
             Select-AzContext -InputObject $context
+                        
             Get-DnsCNameRecords $dnsZone $interestedDnsZones
         }
     }
@@ -624,14 +695,15 @@ workflow Run-BySubscription
         $azSubscriptions,
         $dnsZoneQuery,
         $inputDnsZoneNameRegexFilter,
-        $inputInterestedDnsZones
+        $interestedAzureDnsZones,
+        $InputSubscriptionIdRegexFilterForAzureDns
     )
 
     #Get the Azure DNS Zones
     
     $dnsZones = Get-AzResourcesListForWorkFlow -query $dnsZoneQuery
 
-    $interestedZones = $dnsZones| Where-Object { $psitem.Name -match $inputDnsZoneNameRegexFilter}    
+    $interestedZones = $dnsZones| Where-Object { $psitem.Name -match $inputDnsZoneNameRegexFilter -and $psitem.SubscriptionId -match $InputSubscriptionIdRegexFilterForAzureDns}    
 
     $subsWithZones = ($interestedZones.subscriptionId | Group-Object).Name
     
@@ -646,7 +718,7 @@ workflow Run-BySubscription
     
     [pscustomObject]@{'Name' = 'ProcessSummaryData'; 'wfNumberOfDnsZones' = $wfNumberOfDnsZones; 'wfNumberOfDnsRecordSets' = $wfNumberOfDnsRecordSets } 
 
-    Foreach -parallel($subscription in $azSubscriptions)
+    Foreach -parallel ($subscription in $azSubscriptions)
     {
         If($subscription.subscriptionId -in $subsWithZones)
         {
@@ -654,7 +726,9 @@ workflow Run-BySubscription
             
             $azContext = Get-AzContext
 
-            Get-DnsRecordsWorkFlow -wfDnsZones $($interestedZones) -wfContext $azContext -wfInterestedDnsZones $inputInterestedDnsZones
+            $interestedZones1 = $interestedZones | Where-Object{$psitem.subscriptionId -eq $subscription.subscriptionId}
+
+            Get-DnsRecordsWorkFlow -wfDnsZones $($interestedZones1) -wfContext $azContext -wfInterestedDnsZones $interestedAzureDnsZones -wfSubscription $subscription
         }
     }
 }
@@ -671,7 +745,9 @@ $AzCNameMatchingResources = [System.Collections.ArrayList]::new()
 
 $AzResourcesHash = Get-AzResourcesHash -query $interestedResourcesQuery -keyName 'dnsEndPoint'
 
-$numberOfAzResources = $AzResourcesHash.Count
+$numberOfAzResources = $AzResourcesHash.keys.count
+
+$numberOfSubscriptionsForResources = $azSubscriptionsForResources.count
 
 $AzResourcesFetchTime = Get-TimeToProcess $AzResourcesFetchStart
 
@@ -683,28 +759,28 @@ If($FetchDnsRecordsFromAzureSubscription)
 {   
     #Build the Azure DNS interested CName records
     #   
-    $azSubscriptions = Get-AzSubscription | Where-Object {$psitem.Id -match $inputSubscriptionIdRegexFilter}
+    $azSubscriptionsForDns = Get-AzSubscription | Where-Object {$psitem.Id -match $InputSubscriptionIdRegexFilterForAzureDns}
 
-    $numberOfSubscriptions += $azSubscriptions.Count
+    $numberOfSubscriptionsForDns += $azSubscriptionsForDns.Count
     
-    Write-Warning "Please standby - processing $numberOfSubscriptions subscriptions"
+    Write-Warning "Please standby - processing $numberOfSubscriptionsForDns subscriptions"
 
     $AzDnsCNameRecordSets = [System.Collections.ArrayList]::new()
 
-    If($azSubscriptions -and $runParallel)
+    If($azSubscriptionsForDns -and $runParallel)
     { 
-            $CNameToDnsMapList = Run-BySubscription $azSubscriptions $dnsZoneQuery $inputDnsZoneNameRegexFilter $inputInterestedDnsZones
-            $processSummary = $CNameToDnsMapList | Where-Object {$psitem -match 'ProcessSummaryData'}
-            $numberOfDnsZones += $processSummary.wfNumberOfDnsZones
-            $numberOfDnsRecordSets += $processSummary.wfNumberOfDnsRecordSets
-            
-            Write-Warning "Please standby - processing $numberOfDnsZones DnsZones and $numberOfDnsRecordSets DnsRecordSets"
+        $CNameToDnsMapList = Run-BySubscription $azSubscriptionsForDns $dnsZoneQuery $inputDnsZoneNameRegexFilter $interestedAzureDnsZones $InputSubscriptionIdRegexFilterForAzureDns
+        $processSummary = $CNameToDnsMapList | Where-Object {$psitem -match 'ProcessSummaryData'}
+        $numberOfDnsZones += $processSummary.wfNumberOfDnsZones
+        $numberOfDnsRecordSets += $processSummary.wfNumberOfDnsRecordSets
+        
+        Write-Warning "Please standby - processing $numberOfDnsZones DnsZones and $numberOfDnsRecordSets DnsRecordSets"
 
-            $AzDnsCNameRecordSets += $CNameToDnsMapList | Where-Object {$psitem.FQDN } |Sort-Object -Unique CName, Fqdn, ZoneName, ResourceGroup
+        $AzDnsCNameRecordSets += $CNameToDnsMapList | Where-Object {$psitem.FQDN } |Sort-Object -Unique CName, Fqdn, ZoneName, ResourceGroup
 
-    }elseif($azSubscriptions)
+    }elseif($azSubscriptionsForDns)
     {
-        $azSubscriptions | 
+        $azSubscriptionsForDns | 
         ForEach-Object `
         { 
             $subscription = $psitem
@@ -717,7 +793,7 @@ If($FetchDnsRecordsFromAzureSubscription)
         
             $dnsZones = Get-AZResourcesList -query $dnsZoneQuery
 
-            $interestedZones = $dnsZones| Where-Object { $psitem.Name -match $inputDnsZoneNameRegexFilter}
+            $interestedZones = $dnsZones| Where-Object { $psitem.Name -match $inputDnsZoneNameRegexFilter}            
             
             $numberOfDnsZonesCount = ($interestedZones | Group-Object type).count
             $numberOfDnsZones += $numberOfDnsZonesCount
@@ -732,9 +808,11 @@ If($FetchDnsRecordsFromAzureSubscription)
                         
             Write-Warning "Please standby - processing $numberOfDnsZonesCount DnsZones and $numberOfDnsRecordS DnsRecordSets"
 
-            If($interestedZones -and $subscription.subscriptionId -in $subsWithZones)
+            $interestedZones1 = $interestedZones | Where-Object{$psitem.subscriptionId -eq $subscription}
+
+            If($interestedZones1 -and $subscription.subscriptionId -in $subsWithZones)
             {         
-                $cNameRecords = Get-AzCNameToDnsMap $interestedZones
+                $cNameRecords = Get-AzCNameToDnsMap $interestedZones1
        
                 $i= 0
                 foreach($record in $cNameRecords)
@@ -809,8 +887,11 @@ $AzDnsRecordSetProcessingTime = Get-TimeToProcess $AzDnsRecordSetsStart
 #
 If($AzCNameMissingResources.count -gt 0)
 {
-    Write-Warning "Following CName records missing in Azure resources"
-    $AzCNameMissingResources | Format-Table
+    If($AzCNameMissingResources.count -lt 20)
+    {
+        Write-Warning "Following CName records missing in Azure resources"
+        $AzCNameMissingResources | Format-Table
+    }
     $AzCNameMissingResources | Export-Csv $outputCNameMissingAzResourcesFile -NoTypeInformation -Force
     Write-Host "Found $($AzCNameMissingResources.count) CName records missing Azure resources; saved the file as: $outputCNameMissingAzResourcesFile" -ForegroundColor Red
 }else
@@ -826,7 +907,7 @@ If($AzResourcesHash.count -gt 0)
     Write-Host "Fetched $($AzResourcesHash.values.count) Azure resources; Saved the file as: $outputResourcesFile" -ForegroundColor Green
 }else
 {
-    Write-Error "No Azure resource records fetched"
+    Write-Warning "No Azure resource records fetched"
 }
 
 
@@ -837,7 +918,7 @@ If($AzDnsCNameRecordSets.count -gt 0)
 
 }elseif($FetchDnsRecordsFromAzureSubscription)
 {
-    Write-Error "No Azure DNS CName records fetched"
+    Write-Warning "No Azure DNS CName records fetched"
 }
 
 If($inputCNameList.count -gt 0)
@@ -874,7 +955,11 @@ $summaryTime = Get-TimeToProcess $summaryStart
 
 #Disconnecte Azure account
 #
-#Disconnect-AzAccount | Out-Null
+if($connectionDoneFromScript -eq $true)
+{
+   Disconnect-AzAccount | Out-Null
+   $connectionDoneFromScript = $false
+}
 
 #Write Summary:
 #
@@ -902,7 +987,7 @@ $scriptTime = Get-TimeToProcess $scriptStartTime
 [pscustomObject] @{
     'TypeOfRecords' = "Details"
     'ProcessedType' = $processType
-    'AzureSubscriptions' = $numberOfSubscriptions
+    'AzureSubscriptions' = $numberOfSubscriptionsForDns
     'AzureResources' = $numberOfAzResources
     'AzureDnsZones' = $numberOfDnsZones
     'AzureDnsRecordSets' = $numberOfDnsRecordSets
